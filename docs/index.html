@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Contract Guard — Interactive Demo</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 24px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+        h1 { margin: 0; font-size: 1.6rem; color: #38bdf8; }
+        p.sub { margin: 4px 0 0; color: #94a3b8; font-size: 0.95rem; }
+        a.repo-btn { background: #1e293b; color: #38bdf8; border: 1px solid #334155; padding: 8px 14px; border-radius: 6px; text-decoration: none; font-size: 0.9rem; font-weight: 600; }
+        a.repo-btn:hover { background: #334155; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+        textarea { width: 100%; height: 290px; background: #1e293b; color: #f8fafc; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-family: Consolas, monospace; font-size: 13px; box-sizing: border-box; line-height: 1.45; }
+        label { display: block; font-weight: 600; margin-bottom: 6px; color: #cbd5e1; }
+        .actions { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+        button { background: #0284c7; color: white; border: none; padding: 11px 22px; font-size: 14px; font-weight: 600; border-radius: 8px; cursor: pointer; }
+        button:hover { background: #0369a1; }
+        button.secondary { background: #334155; }
+        button.secondary:hover { background: #475569; }
+        .banner { margin-top: 22px; padding: 14px 18px; border-radius: 8px; font-weight: 700; display: none; }
+        .banner.fail { background: #450a0a; border: 1px solid #ef4444; color: #fca5a5; }
+        .banner.pass { background: #052e16; border: 1px solid #22c55e; color: #86efac; }
+        .card { background: #1e293b; border-left: 5px solid; padding: 12px 16px; margin-top: 10px; border-radius: 6px; font-size: 0.95rem; }
+        .card.BREAKING { border-color: #ef4444; }
+        .card.SAFE { border-color: #22c55e; }
+        .badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; margin-right: 8px; }
+        .BREAKING .badge { background: #ef4444; color: #fff; }
+        .SAFE .badge { background: #22c55e; color: #052e16; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div>
+            <h1>API Contract Guard</h1>
+            <p class="sub">Interactive Playground — Static AST Breaking-Change Detector for Spring Boot APIs</p>
+        </div>
+        <a class="repo-btn" href="https://github.com/RohitBanik-321/api-contract-guard" target="_blank">View Java Source &amp; CI Logs on GitHub &rarr;</a>
+    </div>
+
+    <div class="grid">
+        <div>
+            <label>Old Version (Production / main branch)</label>
+            <textarea id="oldCode"></textarea>
+        </div>
+        <div>
+            <label>New Version (Incoming Pull Request)</label>
+            <textarea id="newCode"></textarea>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button onclick="runDiff()">Analyze API Contract Changes</button>
+        <button class="secondary" onclick="loadBreakingSample()">Load Breaking Sample</button>
+        <button class="secondary" onclick="loadSafeSample()">Load Safe Sample</button>
+    </div>
+
+    <div id="banner" class="banner"></div>
+    <div id="results"></div>
+</div>
+
+<script>
+const SAMPLE_OLD = `@RestController
+@RequestMapping("/api/orders")
+public class OrderController {
+
+    @GetMapping("/{id}")
+    public OrderResponse getOrder(@PathVariable int id) { return null; }
+
+    @DeleteMapping("/{id}")
+    public void cancelOrder(@PathVariable int id) {}
+}
+
+public class OrderResponse {
+    private int orderId;
+    private int deliveryTimeMinutes;
+    private String restaurantName;
+}`;
+
+const SAMPLE_NEW_BREAKING = `@RestController
+@RequestMapping("/api/orders")
+public class OrderController {
+
+    @GetMapping("/{id}")
+    public OrderResponse getOrder(@PathVariable int id) { return null; }
+
+    @PostMapping("/track")
+    public String trackOrder() { return "ON_THE_WAY"; }
+}
+
+public class OrderResponse {
+    private String orderId;
+    private String eta;
+    private String restaurantName;
+}`;
+
+const SAMPLE_NEW_SAFE = `@RestController
+@RequestMapping("/api/orders")
+public class OrderController {
+
+    @GetMapping("/{id}")
+    public OrderResponse getOrder(@PathVariable int id) { return null; }
+
+    @DeleteMapping("/{id}")
+    public void cancelOrder(@PathVariable int id) {}
+
+    @PostMapping("/track")
+    public String trackOrder() { return "ON_THE_WAY"; }
+}
+
+public class OrderResponse {
+    private int orderId;
+    private int deliveryTimeMinutes;
+    private String restaurantName;
+    private String driverPhone;
+}`;
+
+function parseContract(code) {
+    const baseMatch = code.match(/@RequestMapping\s*\(\s*(?:value\s*=\s*|path\s*=\s*)?"([^"]+)"/);
+    const basePath = baseMatch ? baseMatch[1] : "";
+
+    const endpoints = new Map();
+    const epRegex = /@(Get|Post|Put|Delete|Patch)Mapping\s*\(\s*(?:value\s*=\s*|path\s*=\s*)?"([^"]*)"\s*\)\s*public\s+([\w<>[\], ?]+)\s+\w+/g;
+    let m;
+    while ((m = epRegex.exec(code)) !== null) {
+        const method = m[1].toUpperCase();
+        const fullPath = (basePath + "/" + m[2]).replace(/\/+/g, "/").replace(/\/$/, "") || "/";
+        endpoints.set(`${method} ${fullPath}`, m[3].trim());
+    }
+
+    const fields = new Map();
+    const fieldRegex = /(?:private|protected|public)\s+(?:final\s+)?([\w<>[\], ?]+?)\s+(\w+)\s*(?:=[^;]+)?;/g;
+    while ((m = fieldRegex.exec(code)) !== null) {
+        fields.set(m[2].trim(), m[1].trim());
+    }
+
+    return { endpoints, fields };
+}
+
+function runDiff() {
+    const oldSpec = parseContract(document.getElementById("oldCode").value);
+    const newSpec = parseContract(document.getElementById("newCode").value);
+    const changes = [];
+
+    for (const [ep, oldRet] of oldSpec.endpoints.entries()) {
+        if (!newSpec.endpoints.has(ep)) {
+            changes.push({ severity: "BREAKING", category: "ENDPOINT_REMOVED", message: `Endpoint Removed: ${ep} (Returned: ${oldRet}) — existing clients will receive HTTP 404.` });
+        } else if (newSpec.endpoints.get(ep) !== oldRet) {
+            changes.push({ severity: "BREAKING", category: "RETURN_TYPE_CHANGED", message: `Return type changed for ${ep}: ${oldRet} -> ${newSpec.endpoints.get(ep)}.` });
+        }
+    }
+    for (const ep of newSpec.endpoints.keys()) {
+        if (!oldSpec.endpoints.has(ep)) {
+            changes.push({ severity: "SAFE", category: "ENDPOINT_ADDED", message: `New endpoint added: ${ep}.` });
+        }
+    }
+
+    for (const [field, oldType] of oldSpec.fields.entries()) {
+        if (!newSpec.fields.has(field)) {
+            changes.push({ severity: "BREAKING", category: "FIELD_REMOVED", message: `Field '${field}' (${oldType}) was REMOVED from payload.` });
+        } else if (newSpec.fields.get(field) !== oldType) {
+            changes.push({ severity: "BREAKING", category: "TYPE_CHANGED", message: `Field '${field}' type changed: ${oldType} -> ${newSpec.fields.get(field)}.` });
+        }
+    }
+    for (const [field, newType] of newSpec.fields.entries()) {
+        if (!oldSpec.fields.has(field)) {
+            changes.push({ severity: "SAFE", category: "FIELD_ADDED", message: `Optional field '${field}' (${newType}) was ADDED.` });
+        }
+    }
+
+    const breakingCount = changes.filter(c => c.severity === "BREAKING").length;
+    const safeCount = changes.length - breakingCount;
+
+    const banner = document.getElementById("banner");
+    banner.style.display = "block";
+    banner.className = "banner " + (breakingCount === 0 ? "pass" : "fail");
+    banner.textContent = breakingCount === 0
+        ? `RESULT: PASSED — Backward-compatible API (${safeCount} safe addition(s)).`
+        : `RESULT: FAILED — ${breakingCount} breaking change(s) detected. Merge Blocked.`;
+
+    document.getElementById("results").innerHTML = changes.length
+        ? changes.map(c => `<div class="card ${c.severity}"><span class="badge">${c.severity}</span><strong>[${c.category}]</strong> ${c.message}</div>`).join("")
+        : `<div class="card SAFE"><span class="badge">NO DIFF</span>No contract changes detected between versions.</div>`;
+}
+
+function loadBreakingSample() {
+    document.getElementById("oldCode").value = SAMPLE_OLD;
+    document.getElementById("newCode").value = SAMPLE_NEW_BREAKING;
+    runDiff();
+}
+
+function loadSafeSample() {
+    document.getElementById("oldCode").value = SAMPLE_OLD;
+    document.getElementById("newCode").value = SAMPLE_NEW_SAFE;
+    runDiff();
+}
+
+loadBreakingSample();
+</script>
+</body>
+</html>
