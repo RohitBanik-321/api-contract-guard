@@ -7,10 +7,12 @@
     <style>
         body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 24px; }
         .container { max-width: 1100px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
-        h1 { margin: 0; font-size: 1.6rem; color: #38bdf8; }
-        p.sub { margin: 4px 0 0; color: #94a3b8; font-size: 0.95rem; }
-        a.repo-btn { background: #1e293b; color: #38bdf8; border: 1px solid #334155; padding: 8px 14px; border-radius: 6px; text-decoration: none; font-size: 0.9rem; font-weight: 600; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px; margin-bottom: 22px; }
+        .title-block { max-width: 780px; }
+        h1 { margin: 0; font-size: 1.7rem; color: #38bdf8; }
+        p.definition { margin: 8px 0 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.55; }
+        p.definition strong { color: #f8fafc; }
+        a.repo-btn { background: #1e293b; color: #38bdf8; border: 1px solid #334155; padding: 9px 14px; border-radius: 6px; text-decoration: none; font-size: 0.9rem; font-weight: 600; white-space: nowrap; }
         a.repo-btn:hover { background: #334155; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
@@ -37,20 +39,13 @@
 <body>
 <div class="container">
     <div class="header">
-        <div>
+        <div class="title-block">
             <h1>API Contract Guard</h1>
-            <p class="sub">Interactive Playground — Static AST Breaking-Change Detector for Spring Boot APIs</p>
+            <p class="definition">
+                An automated static analysis tool and CI/CD safety gate for Java Spring Boot APIs. It compares incoming code changes against the live production version to detect <strong>breaking contract mutations</strong>—such as deleted endpoints, removed JSON fields, or changed data types—blocking unsafe updates before they crash mobile apps or partner services.
+            </p>
         </div>
         <a class="repo-btn" href="https://github.com/RohitBanik-321/api-contract-guard" target="_blank">View Java Source &amp; CI Logs on GitHub &rarr;</a>
-    </div>
-
-    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-size: 0.9rem; line-height: 1.5; color: #cbd5e1;">
-        <strong style="color: #38bdf8;">How It Works:</strong> Automatically scans Java Spring Boot API code before deployment to block changes that crash mobile apps or partner services.
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #334155;">
-            <div><strong style="color: #f8fafc;">1. Extracts Contracts:</strong> Parses <code>@RestController</code> routes and DTO payload fields from Old vs. New code.</div>
-            <div><strong style="color: #f8fafc;">2. Detects Breakages:</strong> Flags <span style="color: #f87171; font-weight: 600;">[BREAKING]</span> removed URLs/fields &amp; type mutations, while allowing <span style="color: #4ade80; font-weight: 600;">[SAFE]</span> additions.</div>
-            <div><strong style="color: #f8fafc;">3. Blocks Unsafe Merges:</strong> Runs in GitHub Actions CI/CD to fail Pull Requests before broken APIs reach production.</div>
-        </div>
     </div>
 
     <div class="grid">
